@@ -62,3 +62,41 @@
 
 /* Metadata editor */
 .metadata-modal{max-height:88vh;overflow:auto}.metadata-modal .field-label{display:block}.metadata-modal .text-input{display:block;margin-top:6px}.track-head,.track-row{grid-template-columns:32px minmax(150px,2fr) minmax(90px,1.2fr) 60px 58px 34px 34px}
+
+/* Final responsive refinement */
+.track-head,.track-row{grid-template-columns:32px minmax(150px,2fr) minmax(90px,1.2fr) 60px 58px 32px 32px 32px}
+.artist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+.artist-card{display:flex;min-width:0;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--panel);color:var(--text);text-align:left;transition:transform .16s,border-color .16s,background .16s}
+.artist-card:hover{transform:translateY(-2px);border-color:rgba(var(--accent-rgb),.55);background:var(--panel2)}
+.artist-avatar{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:50%;background:rgba(var(--accent-rgb),.14);color:var(--accent)}
+.artist-card b,.artist-card small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.artist-card b{font-size:12px}.artist-card small{margin-top:4px;color:var(--muted);font-size:10px}
+.track-row .fav-button{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;color:var(--muted)}
+.track-row .fav-button:hover{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+.subtle-icon.selected{color:var(--accent);background:rgba(var(--accent-rgb),.12)}
+.track-title:focus-visible,.track-row .fav-button:focus-visible,.subtle-icon:focus-visible,.nav-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.backup-card,.sleep-card{margin-top:14px}
+.backup-import{position:relative;overflow:hidden;display:inline-flex;align-items:center;cursor:pointer}
+.backup-import input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.backup-card .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}
+@media(max-width:850px){
+ .track-head,.track-row{grid-template-columns:26px minmax(120px,1fr) 52px 30px 30px 30px 30px}
+ .track-head span:nth-child(4),.track-row .track-format{display:none}
+}
+@media(max-width:560px){
+ .track-head,.track-row{grid-template-columns:22px minmax(0,1fr) 45px 28px 28px 28px}
+ .track-head span:nth-child(3),.track-row .track-album{display:none}
+ .track-row{gap:4px;padding-left:8px;padding-right:8px}
+ .player-bar{height:auto;min-height:112px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:5px;padding:8px 10px}
+ .now-playing{grid-column:1;grid-row:1;min-width:0}
+ .player-extras{grid-column:2;grid-row:1;display:flex;align-items:center;gap:3px}
+ .player-extras .audio-visualizer,.player-extras>button[aria-label="Громкость"],.player-extras .volume-range{display:none}
+ .player-controls{grid-column:1/-1;grid-row:2;display:flex;width:100%;align-items:center;gap:10px}
+ .player-controls .transport{margin:0;gap:10px;flex:none}
+ .player-controls .progress-row{flex:1;min-width:0}
+ .player-controls .progress-row span{font-size:9px}
+ .artist-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .artist-card{padding:10px;gap:8px}
+ .artist-avatar{width:36px;height:36px}
+}
+@media(prefers-reduced-motion:reduce){.artist-card,.track-row,.lyrics-content p{transition:none!important;animation:none!important}}

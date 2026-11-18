@@ -42,12 +42,32 @@ export function sanitizeSyncState(value = {}) {
       .map(item => ({ id: item.id.slice(0, 128), name: item.name.trim().slice(0, 120), trackIds: strings(item.trackIds, 5000) }))
       .filter(item => item.name.length > 0)
     : []
+  const sourcePrefs = input.preferences && typeof input.preferences === 'object' && !Array.isArray(input.preferences) ? input.preferences : {}
+  const preferences = {}
+  if (['dark', 'light', 'system'].includes(sourcePrefs.theme)) preferences.theme = sourcePrefs.theme
+  if (['violet', 'blue', 'mint', 'rose', 'amber'].includes(sourcePrefs.accent)) preferences.accent = sourcePrefs.accent
+  for (const key of ['compact', 'sidebar', 'visualizer', 'floatingPlayer']) if (typeof sourcePrefs[key] === 'boolean') preferences[key] = sourcePrefs[key]
+  if (['solid', 'gradient', 'glass'].includes(sourcePrefs.background)) preferences.background = sourcePrefs.background
+  for (const [key, min, max] of [['radius', 4, 28], ['fontScale', 85, 120], ['blur', 0, 30]]) {
+    const value = Number(sourcePrefs[key])
+    if (Number.isFinite(value)) preferences[key] = Math.min(max, Math.max(min, value))
+  }
+  const sourceEq = input.equalizer && typeof input.equalizer === 'object' && !Array.isArray(input.equalizer) ? input.equalizer : {}
+  const sourceBands = sourceEq.eq && typeof sourceEq.eq === 'object' ? sourceEq.eq : {}
+  const eq = {}
+  for (const key of ['bass', 'mid', 'treble']) {
+    const value = Number(sourceBands[key])
+    if (Number.isFinite(value)) eq[key] = Math.min(12, Math.max(-12, value))
+  }
+  const equalizer = Object.keys(eq).length ? { eq, eqPreset: typeof sourceEq.eqPreset === 'string' ? sourceEq.eqPreset.slice(0, 40) : 'Пользовательский' } : null
   return {
     version: 1,
     favorites: strings(input.favorites, 10000),
     playlists,
     history: strings(input.history, 500),
     queue: strings(input.queue, 5000),
+    preferences: Object.keys(preferences).length ? preferences : null,
+    equalizer,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
   }
 }

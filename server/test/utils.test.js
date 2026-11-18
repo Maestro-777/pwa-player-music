@@ -42,3 +42,12 @@ test('sanitizeSyncState validates and bounds persisted user data', () => {
   assert.equal(result.updatedAt, null)
   assert.equal('ignored' in result, false)
 })
+
+test('sanitizeSyncState whitelists theme and equalizer settings', () => {
+  const result = sanitizeSyncState({
+    preferences: { theme: 'dark', accent: 'violet', radius: 900, fontScale: 70, sidebar: false, arbitrary: 'drop' },
+    equalizer: { eq: { bass: 30, mid: -20, treble: 3 }, eqPreset: 'Studio' },
+  })
+  assert.deepEqual(result.preferences, { theme: 'dark', accent: 'violet', radius: 28, fontScale: 85, sidebar: false })
+  assert.deepEqual(result.equalizer, { eq: { bass: 12, mid: -12, treble: 3 }, eqPreset: 'Studio' })
+})

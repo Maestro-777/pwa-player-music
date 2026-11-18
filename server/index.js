@@ -14,7 +14,7 @@ const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
 const SYNC_FILE = path.join(SERVER_DIR, 'resonance-sync.json')
 const BACKUP_DIR = path.join(SERVER_DIR, 'backups')
-const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], updatedAt: null }
+const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], preferences: null, equalizer: null, updatedAt: null }
 async function readSync() { try { return sanitizeSyncState(JSON.parse(await fs.readFile(SYNC_FILE, 'utf8'))) } catch { return { ...emptySync } } }
 async function writeSync(value) { const safe = { ...sanitizeSyncState(value), updatedAt: new Date().toISOString() }; await fs.mkdir(SERVER_DIR, { recursive: true }); await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
 
