@@ -10,7 +10,6 @@ const defaults:Prefs = {theme:'dark',accent:'violet',compact:false,sidebar:true,
 const accents:{id:Accent;label:string;color:string}[] = [{id:'violet',label:'Electric violet',color:'#a78bfa'},{id:'blue',label:'Ocean blue',color:'#60a5fa'},{id:'mint',label:'Fresh mint',color:'#5eead4'},{id:'rose',label:'Soft rose',color:'#fb7185'},{id:'amber',label:'Warm amber',color:'#fbbf24'}]
 const readPrefs=():Prefs=>{try{return {...defaults,...JSON.parse(localStorage.getItem('resonance-preferences')||'{}')}}catch{return defaults}}
 const fmt=(n:number)=>{if(!Number.isFinite(n)||n<=0)return '0:00';return Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0')}
-const initials=(s:string)=>s.split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()
 
 export default function App(){
  const [prefs,setPrefs]=useState<Prefs>(readPrefs),[page,setPage]=useState<'home'|'library'|'playlists'|'settings'>('home')
