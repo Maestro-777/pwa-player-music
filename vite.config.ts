@@ -7,7 +7,7 @@ const githubPages = Boolean(process.env.GITHUB_ACTIONS)
 export default defineConfig({
   base: githubPages ? '/pwa-player-music/' : '/',
   server: {
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     strictPort: true,
     proxy: {
       '/api': {

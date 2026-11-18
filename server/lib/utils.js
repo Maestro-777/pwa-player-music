@@ -1,5 +1,9 @@
 import path from 'node:path'
 
+export function resolveServerHost(requestedHost) {
+  return requestedHost === '127.0.0.1' ? requestedHost : '127.0.0.1'
+}
+
 export function resolveSafePath(root, relativePath) {
   const resolvedRoot = path.resolve(root)
   const resolvedPath = path.resolve(resolvedRoot, relativePath)

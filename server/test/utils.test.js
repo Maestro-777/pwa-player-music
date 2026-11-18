@@ -56,3 +56,12 @@ test('sanitizeSyncState clamps all ten equalizer bands independently', () => {
   const result = sanitizeSyncState({ equalizer: { eq: { '32': 14, '64': -14, '125': 2, '250': 0, '500': 1, '1000': 2, '2000': 3, '4000': 4, '8000': 5, '16000': 6 }, eqPreset: 'Manual' } })
   assert.deepEqual(result.equalizer.eq, { '32': 12, '64': -12, '125': 2, '250': 0, '500': 1, '1000': 2, '2000': 3, '4000': 4, '8000': 5, '16000': 6 })
 })
+
+test('resolveServerHost keeps the music API bound to loopback', async () => {
+  const { resolveServerHost } = await import('../lib/utils.js')
+  assert.equal(resolveServerHost(undefined), '127.0.0.1')
+  assert.equal(resolveServerHost('127.0.0.1'), '127.0.0.1')
+  for (const host of ['0.0.0.0', '192.168.1.20', '::', 'localhost', '']) {
+    assert.equal(resolveServerHost(host), '127.0.0.1', host)
+  }
+})

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 import NodeID3 from 'node-id3'
-import { parseByteRange, resolveSafePath, sanitizeSyncState } from './lib/utils.js'
+import { parseByteRange, resolveSafePath, sanitizeSyncState, resolveServerHost } from './lib/utils.js'
 
 const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -19,7 +19,9 @@ async function readSync() { try { return sanitizeSyncState(JSON.parse(await fs.r
 async function writeSync(value) { const safe = { ...sanitizeSyncState(value), updatedAt: new Date().toISOString() }; await fs.mkdir(SERVER_DIR, { recursive: true }); await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
 
 const PORT = Number(process.env.PORT || 4317)
-const HOST = process.env.HOST || '0.0.0.0'
+const requestedHost = process.env.HOST
+const HOST = resolveServerHost(requestedHost)
+if (requestedHost && requestedHost !== HOST) console.warn('Ignoring non-loopback HOST setting. The music API is restricted to 127.0.0.1 and is accessed remotely through the Vite/Tailscale proxy.')
 const MUSIC_ROOT = path.resolve(process.env.MUSIC_ROOT || 'C:\\Users\\makhm\\Music')
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(v => v.trim())
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.wma', '.aiff'])
@@ -218,6 +220,7 @@ app.get('/api/stream/:id', async (req, res) => {
 
 app.listen(PORT, HOST, async () => {
   console.log('Resonance Music Server listening on http://' + HOST + ':' + PORT)
+  console.log('API network exposure: local machine only (Vite/Tailscale proxy)')
   console.log('Music folder: ' + MUSIC_ROOT)
   try { await scanLibrary(); console.log('Indexed ' + tracks.length + ' audio files') }
   catch (error) { console.warn('Initial library scan failed:', error.message) }
