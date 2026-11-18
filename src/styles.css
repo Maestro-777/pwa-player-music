@@ -110,3 +110,60 @@
 .backup-item small{margin-top:4px;font-size:9px;color:var(--muted)}
 .backup-item .secondary-button{flex:none}
 @media(max-width:560px){.backup-item{align-items:flex-start;flex-direction:column}.backup-item .secondary-button{width:100%}}
+
+/* Visual system refinement */
+:root{font-feature-settings:"ss01" on,"cv11" on}
+body{font-size:14px;-webkit-font-smoothing:antialiased}
+.content{padding-top:46px;padding-bottom:48px}
+.eyebrow{font-size:10px;letter-spacing:1.55px}
+.subtitle{font-size:14px;line-height:1.65}
+.breadcrumbs{font-size:11px}
+.connection-pill{font-size:11px}
+.primary-button,.secondary-button{font-size:12px;padding:11px 16px}
+.track-head{font-size:9px;letter-spacing:1.1px}
+.track-row{min-height:66px;font-size:12px}
+.track-title b{font-size:13px}
+.track-title small{font-size:10px}
+.track-cover{width:39px;height:39px;border-radius:9px}
+.track-album{font-size:11px}
+.track-format{font-size:10px}
+.track-time{font-size:11px}
+.now-playing b{font-size:12px}
+.now-playing small{font-size:10px}
+.progress-row{font-size:9px}
+.control-title span{font-size:12px}
+.control-title small{font-size:10px}
+.segmented button{font-size:11px}
+.settings-card-title h3{font-size:15px}
+.settings-card-title p{font-size:11px}
+.field-label{font-size:11px}
+.text-input,.search-box input{font-size:12px}
+.album-card b{font-size:14px}
+.album-card small{font-size:11px}
+.playlist-track{font-size:12px}
+.queue-item>button:first-child{font-size:12px}
+.empty-library h3{font-size:15px}
+.empty-library p{font-size:12px}
+.hero-content p{font-size:13px}
+.feature-strip b{font-size:11px}
+.feature-strip small{font-size:10px}
+.player-bar{box-shadow:0 -10px 40px rgba(0,0,0,.12);backdrop-filter:blur(18px)}
+button:disabled{cursor:not-allowed;opacity:.5;transform:none!important}
+@media(max-width:760px){
+ .player-bar{grid-template-columns:minmax(0,1fr) auto auto}
+ .player-extras{display:flex;align-items:center;gap:4px}
+ .player-extras .audio-visualizer,.player-extras>button[aria-label="Громкость"],.player-extras .volume-range{display:none}
+ .player-controls{width:138px}
+ .player-extras .subtle-icon{width:31px;height:31px}
+ .track-head,.track-row{font-size:11px}
+ .content{padding-top:32px}
+}
+@media(max-width:560px){
+ .player-bar{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto}
+ .player-extras{grid-column:2;grid-row:1}
+ .player-controls{width:100%}
+ .track-row{min-height:58px}
+ .track-title b{font-size:12px}
+ .track-title small{font-size:10px}
+ .page-title h1{font-size:30px}
+}
