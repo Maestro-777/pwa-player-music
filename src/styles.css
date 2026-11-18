@@ -53,3 +53,6 @@
 .eq-control{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 0;border-bottom:1px solid var(--line);font-size:11px;color:var(--soft)}
 .eq-control b{font-size:10px;color:var(--accent)}
 .eq-control input{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+
+.audio-visualizer{width:clamp(72px,12vw,150px);height:28px;display:block;flex:none;opacity:.95}
+@media(max-width:700px){.audio-visualizer{width:52px;height:24px}}
