@@ -6,3 +6,5 @@ server/node_modules
 server/.env
 server/data
 *.log
+server/backups/
+server/resonance-sync.json

@@ -28,6 +28,7 @@ jobs:
           node-version: 20
       - run: npm install
       - run: node --check index.js
+      - run: npm test
   deploy:
     if: github.ref == 'refs/heads/main'
     needs: [frontend, server]

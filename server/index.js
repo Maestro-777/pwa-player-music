@@ -8,14 +8,15 @@ import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 import NodeID3 from 'node-id3'
+import { parseByteRange, resolveSafePath, sanitizeSyncState } from './lib/utils.js'
 
 const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
 const SYNC_FILE = path.join(SERVER_DIR, 'resonance-sync.json')
 const BACKUP_DIR = path.join(SERVER_DIR, 'backups')
 const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], updatedAt: null }
-async function readSync() { try { return { ...emptySync, ...JSON.parse(await fs.readFile(SYNC_FILE, 'utf8')) } } catch { return { ...emptySync } } }
-async function writeSync(value) { const safe = { version: 1, favorites: Array.isArray(value.favorites) ? value.favorites.filter(x => typeof x === 'string').slice(0, 10000) : [], playlists: Array.isArray(value.playlists) ? value.playlists.slice(0, 500) : [], history: Array.isArray(value.history) ? value.history.slice(0, 500) : [], queue: Array.isArray(value.queue) ? value.queue.slice(0, 5000) : [], updatedAt: new Date().toISOString() }; await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
+async function readSync() { try { return sanitizeSyncState(JSON.parse(await fs.readFile(SYNC_FILE, 'utf8'))) } catch { return { ...emptySync } } }
+async function writeSync(value) { const safe = { ...sanitizeSyncState(value), updatedAt: new Date().toISOString() }; await fs.mkdir(SERVER_DIR, { recursive: true }); await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
 
 const PORT = Number(process.env.PORT || 4317)
 const HOST = process.env.HOST || '0.0.0.0'
@@ -81,8 +82,8 @@ app.get('/api/library', (_req, res) => res.json({ tracks, lastScan, root: MUSIC_
 app.get('/api/cover/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
-  const absolutePath = path.resolve(MUSIC_ROOT, track.relativePath)
-  if (!absolutePath.startsWith(MUSIC_ROOT + path.sep)) return res.sendStatus(400)
+  let absolutePath
+  try { absolutePath = resolveSafePath(MUSIC_ROOT, track.relativePath) } catch { return res.sendStatus(400) }
   try {
     const metadata = await parseFile(absolutePath, { duration: false })
     const picture = metadata.common.picture?.[0]
@@ -95,8 +96,8 @@ app.get('/api/cover/:id', async (req, res) => {
 app.get('/api/lyrics/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
-  const audioPath = path.resolve(MUSIC_ROOT, track.relativePath)
-  if (!audioPath.startsWith(MUSIC_ROOT + path.sep)) return res.sendStatus(400)
+  let audioPath
+  try { audioPath = resolveSafePath(MUSIC_ROOT, track.relativePath) } catch { return res.sendStatus(400) }
   const stem = audioPath.slice(0, audioPath.length - path.extname(audioPath).length)
   for (const ext of ['.lrc', '.txt']) {
     try {
@@ -109,9 +110,7 @@ app.get('/api/lyrics/:id', async (req, res) => {
   return res.sendStatus(404)
 })
 function safeTrackPath(track) {
-  const absolutePath = path.resolve(MUSIC_ROOT, track.relativePath)
-  if (!absolutePath.startsWith(MUSIC_ROOT + path.sep)) throw new Error('Invalid track path')
-  return absolutePath
+  return resolveSafePath(MUSIC_ROOT, track.relativePath)
 }
 function writeId3(tags, filePath) {
   return new Promise((resolve, reject) => NodeID3.write(tags, filePath, error => error ? reject(error) : resolve(true)))
@@ -156,6 +155,34 @@ app.post('/api/metadata/:id/restore', async (req, res) => {
   catch (error) { res.status(500).json({ error: error.message }) }
 })
 
+app.get('/api/backups', async (_req, res) => {
+  try {
+    await fs.mkdir(BACKUP_DIR, { recursive: true })
+    const entries = await fs.readdir(BACKUP_DIR, { withFileTypes: true })
+    const backups = []
+    for (const entry of entries) {
+      if (!entry.isFile() || !/^[a-f0-9]{40}-\d+\.mp3$/.test(entry.name)) continue
+      const stat = await fs.stat(path.join(BACKUP_DIR, entry.name))
+      backups.push({ id: entry.name.slice(0, -4), trackId: entry.name.split('-')[0], createdAt: new Date(stat.mtimeMs).toISOString(), size: stat.size })
+    }
+    backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    res.json({ backups })
+  } catch (error) { res.status(500).json({ error: error.message }) }
+})
+app.post('/api/backups/:id/restore', async (req, res) => {
+  if (!/^[a-f0-9]{40}-\d+$/.test(req.params.id)) return res.sendStatus(400)
+  const [trackId] = req.params.id.split('-')
+  const track = tracks.find(item => item.id === trackId)
+  if (!track || path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.sendStatus(404)
+  try {
+    const backupPath = path.join(BACKUP_DIR, req.params.id + '.mp3')
+    await fs.access(backupPath)
+    await fs.copyFile(backupPath, safeTrackPath(track))
+    await scanLibrary()
+    res.json({ ok: true, track: tracks.find(item => item.id === track.id) })
+  } catch (error) { res.status(500).json({ error: error.message }) }
+})
+
 app.get('/api/sync', async (_req, res) => res.json(await readSync()))
 app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
 app.post('/api/library/scan', async (_req, res) => {
@@ -165,8 +192,8 @@ app.post('/api/library/scan', async (_req, res) => {
 app.get('/api/stream/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.status(404).json({ error: 'Track not found. Scan the library first.' })
-  const absolutePath = path.resolve(MUSIC_ROOT, track.relativePath)
-  if (!absolutePath.startsWith(MUSIC_ROOT + path.sep)) return res.status(400).json({ error: 'Invalid path' })
+  let absolutePath
+  try { absolutePath = resolveSafePath(MUSIC_ROOT, track.relativePath) } catch { return res.status(400).json({ error: 'Invalid path' }) }
   try {
     const stat = await fs.stat(absolutePath)
     const ext = path.extname(absolutePath).toLowerCase()
@@ -176,11 +203,9 @@ app.get('/api/stream/:id', async (req, res) => {
     res.setHeader('Cache-Control', 'private, max-age=3600')
     const range = req.headers.range
     if (range) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(range)
-      if (!match) return res.status(416).end()
-      const start = match[1] ? Number(match[1]) : Math.max(0, stat.size - Number(match[2]))
-      const end = match[1] && match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1
-      if (start >= stat.size || start > end) return res.status(416).set('Content-Range', 'bytes */' + stat.size).end()
+      const parsed = parseByteRange(range, stat.size)
+      if (!parsed) return res.status(416).set('Content-Range', 'bytes */' + stat.size).end()
+      const { start, end } = parsed
       res.status(206).set({ 'Content-Range': 'bytes ' + start + '-' + end + '/' + stat.size, 'Content-Length': end - start + 1 })
       return createReadStream(absolutePath, { start, end }).pipe(res)
     }
