@@ -65,3 +65,11 @@ test('resolveServerHost keeps the music API bound to loopback', async () => {
     assert.equal(resolveServerHost(host), '127.0.0.1', host)
   }
 })
+
+test('sanitizeUploadFilename strips paths and unsafe characters while preserving valid audio extensions', async () => {
+  const { sanitizeUploadFilename } = await import('../lib/utils.js')
+  assert.equal(sanitizeUploadFilename('C:\\Users\\me\\Live Set.mp3'), 'Live Set.mp3')
+  assert.equal(sanitizeUploadFilename('../../Album: Track?.FLAC'), 'Album_ Track_.flac')
+  assert.throws(() => sanitizeUploadFilename('cover.jpg'), /Unsupported audio/)
+  assert.throws(() => sanitizeUploadFilename(''), /Empty upload/)
+})

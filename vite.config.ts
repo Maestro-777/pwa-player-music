@@ -8,6 +8,7 @@ export default defineConfig({
   base: githubPages ? '/pwa-player-music/' : '/',
   server: {
     host: '127.0.0.1',
+    allowedHosts: ['.trycloudflare.com'],
     strictPort: true,
     proxy: {
       '/api': {

@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import multer from 'multer'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 import NodeID3 from 'node-id3'
-import { parseByteRange, resolveSafePath, sanitizeSyncState, resolveServerHost } from './lib/utils.js'
+import { parseByteRange, resolveSafePath, sanitizeSyncState, resolveServerHost, sanitizeUploadFilename } from './lib/utils.js'
 
 const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -23,19 +24,61 @@ const requestedHost = process.env.HOST
 const HOST = resolveServerHost(requestedHost)
 if (requestedHost && requestedHost !== HOST) console.warn('Ignoring non-loopback HOST setting. The music API is restricted to 127.0.0.1 and is accessed remotely through the Vite/Tailscale proxy.')
 const MUSIC_ROOT = path.resolve(process.env.MUSIC_ROOT || 'C:\\Users\\makhm\\Music')
+const UPLOAD_DIR = path.join(MUSIC_ROOT, 'Resonance Uploads')
+const API_ACCESS_KEY = (process.env.RESONANCE_ACCESS_KEY || '').trim()
+const authFailures = new Map()
+const AUTH_WINDOW_MS = 15 * 60 * 1000
+const AUTH_FAILURE_LIMIT = 8
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(v => v.trim())
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.wma', '.aiff'])
 let tracks = []
 let lastScan = null
 let scanPromise = null
 
-app.use(cors({ origin(origin, callback) {
+app.use(cors({ credentials: true, origin(origin, callback) {
   const isPrivateLan = origin && /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
   const isTailscale = origin && /^https:\/\/[a-z0-9-]+\.ts\.net$/.test(origin)
   if (!origin || allowedOrigins.includes(origin) || isPrivateLan || isTailscale) return callback(null, true)
   return callback(new Error('Origin is not allowed by CORS'))
 } }))
 app.use(express.json({ limit: '12mb' }))
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left || ''))
+  const b = Buffer.from(String(right || ''))
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b)
+}
+function sessionCookie(req) {
+  const item = (req.headers.cookie || '').split(';').map(value => value.trim()).find(value => value.startsWith('resonance_session='))
+  if (!item) return ''
+  try { return decodeURIComponent(item.slice('resonance_session='.length)) } catch { return '' }
+}
+function authFailureKey(req) { return req.get('cf-connecting-ip') || req.ip || req.socket.remoteAddress || 'unknown' }
+app.post('/api/auth/session', (req, res) => {
+  if (!API_ACCESS_KEY) return res.status(503).json({ error: 'Ключ доступа не настроен. Перезапусти 2-ЗАПУСТИТЬ.bat.' })
+  const ip = authFailureKey(req), now = Date.now(), previous = authFailures.get(ip)
+  if (previous && now - previous.since < AUTH_WINDOW_MS && previous.count >= AUTH_FAILURE_LIMIT) return res.status(429).json({ error: 'Слишком много неверных попыток. Попробуй позже.' })
+  if (!safeEqual(req.get('x-resonance-key'), API_ACCESS_KEY)) {
+    const current = previous && now - previous.since < AUTH_WINDOW_MS ? previous : { since: now, count: 0 }
+    current.count += 1; authFailures.set(ip, current)
+    return res.status(401).json({ error: 'Ключ доступа неверный.' })
+  }
+  authFailures.delete(ip)
+  const secure = req.secure || (req.get('x-forwarded-proto') || '').split(',')[0].trim() === 'https'
+  res.setHeader('Set-Cookie', 'resonance_session=' + encodeURIComponent(API_ACCESS_KEY) + '; HttpOnly; Path=/api; SameSite=Strict; Max-Age=28800' + (secure ? '; Secure' : ''))
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ ok: true, expiresIn: 28800 })
+})
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' && req.method === 'GET') return next()
+  if (req.path === '/auth/session' && req.method === 'POST') return next()
+  if (!API_ACCESS_KEY) return res.status(503).json({ error: 'Ключ доступа сервера не настроен.' })
+  const ip = authFailureKey(req), now = Date.now(), previous = authFailures.get(ip)
+  if (previous && now - previous.since < AUTH_WINDOW_MS && previous.count >= AUTH_FAILURE_LIMIT) return res.status(429).json({ error: 'Слишком много неверных попыток. Попробуй позже.' })
+  if (safeEqual(req.get('x-resonance-key'), API_ACCESS_KEY) || safeEqual(sessionCookie(req), API_ACCESS_KEY)) { authFailures.delete(ip); if (safeEqual(req.get('x-resonance-key'), API_ACCESS_KEY)) { const secure = req.secure || (req.get('x-forwarded-proto') || '').split(',')[0].trim() === 'https'; res.setHeader('Set-Cookie', 'resonance_session=' + encodeURIComponent(API_ACCESS_KEY) + '; HttpOnly; Path=/api; SameSite=Strict; Max-Age=28800' + (secure ? '; Secure' : '')) } return next() }
+  const current = previous && now - previous.since < AUTH_WINDOW_MS ? previous : { since: now, count: 0 }
+  current.count += 1; authFailures.set(ip, current)
+  return res.status(401).json({ error: 'Нужен ключ доступа Resonance. Введи его в окне подключения.' })
+})
 
 async function walk(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true })
@@ -81,7 +124,7 @@ async function scanLibrary() {
   finally { if (scanPromise === currentScan) scanPromise = null }
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'Resonance Music Server', version: '0.2.0', root: MUSIC_ROOT, lastScan, trackCount: tracks.length }))
+app.get('/api/health', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ ok: true, name: 'Resonance Music Server', version: '0.3.0', requiresKey: Boolean(API_ACCESS_KEY), lastScan, trackCount: tracks.length }))
 app.get('/api/library', (_req, res) => res.json({ tracks, lastScan, root: MUSIC_ROOT }))
 app.get('/api/cover/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
@@ -189,6 +232,35 @@ app.post('/api/backups/:id/restore', async (req, res) => {
 
 app.get('/api/sync', async (_req, res) => res.json(await readSync()))
 app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
+async function uniqueUploadName(directory, originalName) {
+  const safeName = sanitizeUploadFilename(originalName), extension = path.extname(safeName), stem = path.basename(safeName, extension)
+  for (let index = 0; index < 10000; index += 1) {
+    const candidate = index === 0 ? safeName : stem + ' (' + index + ')' + extension
+    try { await fs.access(path.join(directory, candidate)) }
+    catch (error) { if (error.code === 'ENOENT') return candidate; throw error }
+  }
+  throw new Error('Не удалось подобрать уникальное имя файла.')
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(_req, _file, callback) { fs.mkdir(UPLOAD_DIR, { recursive: true }).then(() => callback(null, UPLOAD_DIR), callback) },
+    filename(_req, file, callback) { uniqueUploadName(UPLOAD_DIR, file.originalname).then(name => callback(null, name), callback) },
+  }),
+  fileFilter(_req, file, callback) {
+    const extension = path.extname(file.originalname).toLowerCase()
+    if (!AUDIO_EXTENSIONS.has(extension)) return callback(new Error('Формат ' + extension + ' не поддерживается.'))
+    callback(null, true)
+  },
+  limits: { fileSize: 1024 * 1024 * 1024, files: 40, fields: 10, parts: 50 },
+})
+app.post('/api/uploads', upload.array('files', 40), async (req, res) => {
+  const files = Array.isArray(req.files) ? req.files : []
+  if (!files.length) return res.status(400).json({ error: 'Выбери хотя бы один аудиофайл.' })
+  try {
+    const library = await scanLibrary()
+    res.status(201).json({ ok: true, uploaded: files.length, files: files.map(file => file.filename), trackCount: library.length, folder: path.relative(MUSIC_ROOT, UPLOAD_DIR) })
+  } catch (error) { res.status(500).json({ error: 'Файлы загружены, но библиотеку не удалось обновить: ' + error.message }) }
+})
 app.post('/api/library/scan', async (_req, res) => {
   try { const result = await scanLibrary(); res.json({ ok: true, count: result.length, lastScan }) }
   catch (error) { res.status(500).json({ ok: false, error: error.message, root: MUSIC_ROOT }) }
@@ -218,9 +290,18 @@ app.get('/api/stream/:id', async (req, res) => {
   } catch { if (!res.headersSent) res.sendStatus(404); else res.destroy() }
 })
 
+app.use((error, _req, res, _next) => {
+  if (error instanceof multer.MulterError) {
+    const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400
+    return res.status(status).json({ error: error.code === 'LIMIT_FILE_SIZE' ? 'Файл превышает максимальный размер 1 ГБ.' : 'Не удалось принять загрузку: ' + error.message })
+  }
+  if (error) return res.status(400).json({ error: error.message || 'Ошибка запроса.' })
+  return res.sendStatus(404)
+})
 app.listen(PORT, HOST, async () => {
   console.log('Resonance Music Server listening on http://' + HOST + ':' + PORT)
-  console.log('API network exposure: local machine only (Vite/Tailscale proxy)')
+  console.log('API network exposure: loopback only (Vite/Tailscale/Cloudflare proxy)')
+  if (!API_ACCESS_KEY) console.error('RESONANCE_ACCESS_KEY is missing. API requests will be rejected; run 2-ЗАПУСТИТЬ.bat to create one.')
   console.log('Music folder: ' + MUSIC_ROOT)
   try { await scanLibrary(); console.log('Indexed ' + tracks.length + ' audio files') }
   catch (error) { console.warn('Initial library scan failed:', error.message) }

@@ -8,3 +8,5 @@ server/data
 *.log
 server/backups/
 server/resonance-sync.json
+
+server/.access-key.txt

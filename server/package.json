@@ -13,6 +13,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "music-metadata": "^10.7.0",
-    "node-id3": "^0.2.9"
+    "node-id3": "^0.2.9",
+    "multer": "^2.5.0"
   }
 }

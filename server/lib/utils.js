@@ -79,3 +79,14 @@ export function sanitizeSyncState(value = {}) {
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
   }
 }
+
+const AUDIO_UPLOAD_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.wma', '.aiff'])
+export function sanitizeUploadFilename(input) {
+  if (typeof input !== 'string' || !input.trim()) throw new Error('Empty upload filename')
+  const leaf = input.replace(/\\/g, '/').split('/').pop().normalize('NFKC').trim()
+  const extension = path.extname(leaf).toLowerCase()
+  if (!AUDIO_UPLOAD_EXTENSIONS.has(extension)) throw new Error('Unsupported audio file extension')
+  const rawStem = leaf.slice(0, leaf.length - path.extname(leaf).length)
+  const stem = rawStem.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+/, '').replace(/[. ]+$/g, '').trim().slice(0, 120) || 'audio'
+  return stem + extension
+}
