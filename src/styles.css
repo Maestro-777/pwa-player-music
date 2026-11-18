@@ -167,3 +167,11 @@ button:disabled{cursor:not-allowed;opacity:.5;transform:none!important}
  .track-title small{font-size:10px}
  .page-title h1{font-size:30px}
 }
+
+.queue-actions{display:flex;align-items:center;gap:2px;flex:none}
+.queue-actions .subtle-icon{width:28px;height:28px;border:0;background:transparent}
+.queue-actions .subtle-icon:disabled{opacity:.25}
+.queue-play{min-width:0}
+.playlist-track-row{display:flex;align-items:center;gap:6px}
+.playlist-track-row .playlist-track{flex:1;min-width:0;text-align:left}
+.playlist-track-row .subtle-icon{flex:none;border:0;background:transparent}
