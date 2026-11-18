@@ -76,6 +76,20 @@ async function scanLibrary() {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'Resonance Music Server', version: '0.2.0', root: MUSIC_ROOT, lastScan, trackCount: tracks.length }))
 app.get('/api/library', (_req, res) => res.json({ tracks, lastScan, root: MUSIC_ROOT }))
+app.get('/api/cover/:id', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.sendStatus(404)
+  const absolutePath = path.resolve(MUSIC_ROOT, track.relativePath)
+  if (!absolutePath.startsWith(MUSIC_ROOT + path.sep)) return res.sendStatus(400)
+  try {
+    const metadata = await parseFile(absolutePath, { duration: false })
+    const picture = metadata.common.picture?.[0]
+    if (!picture?.data?.length) return res.sendStatus(404)
+    res.setHeader('Content-Type', picture.format || 'image/jpeg')
+    res.setHeader('Cache-Control', 'private, max-age=86400')
+    res.end(picture.data)
+  } catch { res.sendStatus(404) }
+})
 app.get('/api/sync', async (_req, res) => res.json(await readSync()))
 app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
 app.post('/api/library/scan', async (_req, res) => {
