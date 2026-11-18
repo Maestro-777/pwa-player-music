@@ -39,7 +39,7 @@ export default function App(){
   const canvas=visualCanvas.current, meter=analyser.current
   if(!canvas||!meter||!prefs.visualizer||!playing)return
   const ctx=canvas.getContext('2d');if(!ctx)return
-  const data=new Uint8Array(meter.frequencyBinCount);let frame=0,raf=0
+  const data=new Uint8Array(meter.frequencyBinCount);let raf=0
   const draw=()=>{
    const width=canvas.clientWidth||180,height=canvas.clientHeight||28
    const dpr=window.devicePixelRatio||1
