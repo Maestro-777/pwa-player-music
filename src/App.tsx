@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   Activity, Album, AudioLines, Check, ChevronDown, Disc3, FolderMusic,
   Headphones, Heart, Home, Library, ListMusic, Music2, Palette, Pause,
@@ -130,14 +131,14 @@ export default function App() {
   )
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+function NavButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
   return <button className={`nav-button ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <i/>}</button>
 }
 
 function ThemeControls({ prefs, update, accent }: { prefs: Preferences; update: <K extends keyof Preferences>(key: K, value: Preferences[K]) => void; accent: { label: string; color: string } }) {
   return <div className="theme-controls">
     <div className="control-group"><div className="control-title"><span>Режим оформления</span><small>Выбери атмосферу приложения</small></div><div className="segmented">{(['dark', 'light', 'system'] as Theme[]).map(theme => <button key={theme} className={prefs.theme === theme ? 'selected' : ''} onClick={() => update('theme', theme)}>{theme === 'dark' ? 'Тёмная' : theme === 'light' ? 'Светлая' : 'Системная'}</button>)}</div></div>
-    <div className="control-group"><div className="control-title"><span>Акцентный цвет</span><small>{accent.label}</small></div><div className="swatches">{accents.map(item => <button key={item.id} className={`swatch ${prefs.accent === item.id ? 'chosen' : ''}`} style={{ '--swatch': item.color } as React.CSSProperties} onClick={() => update('accent', item.id)} aria-label={item.label}>{prefs.accent === item.id && <Check size={16}/>}</button>)}</div></div>
+    <div className="control-group"><div className="control-title"><span>Акцентный цвет</span><small>{accent.label}</small></div><div className="swatches">{accents.map(item => <button key={item.id} className={`swatch ${prefs.accent === item.id ? 'chosen' : ''}`} style={{ '--swatch': item.color } as CSSProperties} onClick={() => update('accent', item.id)} aria-label={item.label}>{prefs.accent === item.id && <Check size={16}/>}</button>)}</div></div>
     <div className="control-group toggle-row"><div className="control-title"><span>Компактная библиотека</span><small>Больше элементов на экране</small></div><button className={`toggle ${prefs.compact ? 'on' : ''}`} onClick={() => update('compact', !prefs.compact)} aria-pressed={prefs.compact}><i/></button></div>
     <div className="control-group toggle-row"><div className="control-title"><span>Боковая панель</span><small>Навигация слева</small></div><button className={`toggle ${prefs.sidebar ? 'on' : ''}`} onClick={() => update('sidebar', !prefs.sidebar)} aria-pressed={prefs.sidebar}><i/></button></div>
     <div className="control-group toggle-row"><div className="control-title"><span>Визуальные эффекты</span><small>Декоративная анимация интерфейса</small></div><button className={`toggle ${prefs.visualizer ? 'on' : ''}`} onClick={() => update('visualizer', !prefs.visualizer)} aria-pressed={prefs.visualizer}><i/></button></div>
