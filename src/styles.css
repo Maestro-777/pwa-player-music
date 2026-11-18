@@ -100,3 +100,13 @@
  .artist-avatar{width:36px;height:36px}
 }
 @media(prefers-reduced-motion:reduce){.artist-card,.track-row,.lyrics-content p{transition:none!important;animation:none!important}}
+
+.backup-list{display:grid;gap:8px;margin:14px 0}
+.backup-list> b{font-size:11px;color:var(--text)}
+.backup-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.backup-item>span{display:block;min-width:0}
+.backup-item b,.backup-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.backup-item b{font-size:11px;color:var(--text)}
+.backup-item small{margin-top:4px;font-size:9px;color:var(--muted)}
+.backup-item .secondary-button{flex:none}
+@media(max-width:560px){.backup-item{align-items:flex-start;flex-direction:column}.backup-item .secondary-button{width:100%}}
