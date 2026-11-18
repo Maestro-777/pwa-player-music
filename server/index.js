@@ -4,10 +4,17 @@ import cors from 'cors'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 
 const app = express()
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
+const SYNC_FILE = path.join(SERVER_DIR, 'resonance-sync.json')
+const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], updatedAt: null }
+async function readSync() { try { return { ...emptySync, ...JSON.parse(await fs.readFile(SYNC_FILE, 'utf8')) } } catch { return { ...emptySync } } }
+async function writeSync(value) { const safe = { version: 1, favorites: Array.isArray(value.favorites) ? value.favorites.filter(x => typeof x === 'string').slice(0, 10000) : [], playlists: Array.isArray(value.playlists) ? value.playlists.slice(0, 500) : [], history: Array.isArray(value.history) ? value.history.slice(0, 500) : [], queue: Array.isArray(value.queue) ? value.queue.slice(0, 5000) : [], updatedAt: new Date().toISOString() }; await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
+
 const PORT = Number(process.env.PORT || 4317)
 const HOST = process.env.HOST || '0.0.0.0'
 const MUSIC_ROOT = path.resolve(process.env.MUSIC_ROOT || 'C:\\Users\\makhm\\Music')
@@ -19,7 +26,8 @@ let scanning = false
 
 app.use(cors({ origin(origin, callback) {
   const isPrivateLan = origin && /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
-  if (!origin || allowedOrigins.includes(origin) || isPrivateLan) return callback(null, true)
+  const isTailscale = origin && /^https:\/\/[a-z0-9-]+\.ts\.net$/.test(origin)
+  if (!origin || allowedOrigins.includes(origin) || isPrivateLan || isTailscale) return callback(null, true)
   return callback(new Error('Origin is not allowed by CORS'))
 } }))
 app.use(express.json({ limit: '1mb' }))
@@ -68,6 +76,8 @@ async function scanLibrary() {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'Resonance Music Server', version: '0.2.0', root: MUSIC_ROOT, lastScan, trackCount: tracks.length }))
 app.get('/api/library', (_req, res) => res.json({ tracks, lastScan, root: MUSIC_ROOT }))
+app.get('/api/sync', async (_req, res) => res.json(await readSync()))
+app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
 app.post('/api/library/scan', async (_req, res) => {
   try { const result = await scanLibrary(); res.json({ ok: true, count: result.length, lastScan }) }
   catch (error) { res.status(500).json({ ok: false, error: error.message, root: MUSIC_ROOT }) }
