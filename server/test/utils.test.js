@@ -49,5 +49,10 @@ test('sanitizeSyncState whitelists theme and equalizer settings', () => {
     equalizer: { eq: { bass: 30, mid: -20, treble: 3 }, eqPreset: 'Studio' },
   })
   assert.deepEqual(result.preferences, { theme: 'dark', accent: 'violet', radius: 28, fontScale: 85, sidebar: false })
-  assert.deepEqual(result.equalizer, { eq: { bass: 12, mid: -12, treble: 3 }, eqPreset: 'Studio' })
+  assert.deepEqual(result.equalizer, { eq: { '32': 12, '64': 12, '125': 12, '250': -12, '500': -12, '1000': -12, '2000': -12, '4000': 3, '8000': 3, '16000': 3 }, eqPreset: 'Studio' })
+})
+
+test('sanitizeSyncState clamps all ten equalizer bands independently', () => {
+  const result = sanitizeSyncState({ equalizer: { eq: { '32': 14, '64': -14, '125': 2, '250': 0, '500': 1, '1000': 2, '2000': 3, '4000': 4, '8000': 5, '16000': 6 }, eqPreset: 'Manual' } })
+  assert.deepEqual(result.equalizer.eq, { '32': 12, '64': -12, '125': 2, '250': 0, '500': 1, '1000': 2, '2000': 3, '4000': 4, '8000': 5, '16000': 6 })
 })

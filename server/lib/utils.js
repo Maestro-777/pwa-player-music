@@ -55,9 +55,13 @@ export function sanitizeSyncState(value = {}) {
   const sourceEq = input.equalizer && typeof input.equalizer === 'object' && !Array.isArray(input.equalizer) ? input.equalizer : {}
   const sourceBands = sourceEq.eq && typeof sourceEq.eq === 'object' ? sourceEq.eq : {}
   const eq = {}
-  for (const key of ['bass', 'mid', 'treble']) {
-    const value = Number(sourceBands[key])
-    if (Number.isFinite(value)) eq[key] = Math.min(12, Math.max(-12, value))
+  const bandKeys = ['32', '64', '125', '250', '500', '1000', '2000', '4000', '8000', '16000']
+  const clampBand = value => Number.isFinite(value) ? Math.min(12, Math.max(-12, value)) : 0
+  if (bandKeys.some(key => typeof sourceBands[key] === 'number')) {
+    for (const key of bandKeys) eq[key] = clampBand(sourceBands[key])
+  } else {
+    const bass = clampBand(sourceBands.bass), mid = clampBand(sourceBands.mid), treble = clampBand(sourceBands.treble)
+    Object.assign(eq, { '32': bass, '64': bass, '125': bass, '250': mid, '500': mid, '1000': mid, '2000': mid, '4000': treble, '8000': treble, '16000': treble })
   }
   const equalizer = Object.keys(eq).length ? { eq, eqPreset: typeof sourceEq.eqPreset === 'string' ? sourceEq.eqPreset.slice(0, 40) : 'Пользовательский' } : null
   return {
