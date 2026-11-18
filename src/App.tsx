@@ -5,8 +5,8 @@ import { Activity, AudioLines, Check, ChevronDown, Disc3, FolderOpen, Headphones
 type Track = { id:string; title:string; artist:string; album:string; duration:number; format:string; year:number|null; genre:string|null }
 type Theme = 'dark'|'light'|'system'
 type Accent = 'violet'|'blue'|'mint'|'rose'|'amber'
-type Prefs = { theme:Theme; accent:Accent; compact:boolean; sidebar:boolean; visualizer:boolean; background:string; radius:number }
-const defaults:Prefs = {theme:'dark',accent:'violet',compact:false,sidebar:true,visualizer:true,background:'solid',radius:14}
+type Prefs = { theme:Theme; accent:Accent; compact:boolean; sidebar:boolean; visualizer:boolean; background:string; radius:number; fontScale:number; blur:number; floatingPlayer:boolean }
+const defaults:Prefs = {theme:'dark',accent:'violet',compact:false,sidebar:true,visualizer:true,background:'solid',radius:14,fontScale:100,blur:16,floatingPlayer:false}
 const accents:{id:Accent;label:string;color:string}[] = [{id:'violet',label:'Electric violet',color:'#a78bfa'},{id:'blue',label:'Ocean blue',color:'#60a5fa'},{id:'mint',label:'Fresh mint',color:'#5eead4'},{id:'rose',label:'Soft rose',color:'#fb7185'},{id:'amber',label:'Warm amber',color:'#fbbf24'}]
 const readPrefs=():Prefs=>{try{return {...defaults,...JSON.parse(localStorage.getItem('resonance-preferences')||'{}')}}catch{return defaults}}
 const fmt=(n:number)=>{if(!Number.isFinite(n)||n<=0)return '0:00';return Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0')}
@@ -20,7 +20,7 @@ export default function App(){
  const audio=useRef<HTMLAudioElement>(null)
  const base=apiUrl.trim().replace(/\/$/,'')
  const update=<K extends keyof Prefs>(k:K,v:Prefs[K])=>setPrefs(p=>({...p,[k]:v}))
- useEffect(()=>{localStorage.setItem('resonance-preferences',JSON.stringify(prefs));document.documentElement.dataset.theme=prefs.theme;document.documentElement.dataset.accent=prefs.accent;document.documentElement.dataset.density=prefs.compact?'compact':'comfortable';document.documentElement.dataset.background=prefs.background;document.documentElement.dataset.visualizer=prefs.visualizer?'on':'off';document.documentElement.style.setProperty('--card-radius',prefs.radius+'px')},[prefs])
+ useEffect(()=>{localStorage.setItem('resonance-preferences',JSON.stringify(prefs));document.documentElement.dataset.theme=prefs.theme;document.documentElement.dataset.accent=prefs.accent;document.documentElement.dataset.density=prefs.compact?'compact':'comfortable';document.documentElement.dataset.background=prefs.background;document.documentElement.dataset.visualizer=prefs.visualizer?'on':'off';document.documentElement.style.setProperty('--card-radius',prefs.radius+'px');document.documentElement.style.setProperty('--font-scale',String(prefs.fontScale/100));document.documentElement.style.setProperty('--glass-blur',prefs.blur+'px');document.documentElement.dataset.player=prefs.floatingPlayer?'floating':'solid'},[prefs])
  useEffect(()=>{localStorage.setItem('resonance-favorites',JSON.stringify(favorites))},[favorites])
  useEffect(()=>{localStorage.setItem('resonance-presets',JSON.stringify(presets))},[presets])
  async function loadLibrary(scan=false){setScanBusy(true);setError('');try{if(scan){const s=await fetch(base+'/api/library/scan',{method:'POST'});if(!s.ok)throw new Error('Не удалось просканировать папку')}const r=await fetch(base+'/api/library');if(!r.ok)throw new Error('Сервер не вернул библиотеку');const data=await r.json();setTracks(data.tracks||[]);setServer('online')}catch(e){setServer('offline');setError(e instanceof Error?e.message:'Ошибка подключения')}finally{setScanBusy(false)}}

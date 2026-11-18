@@ -32,3 +32,8 @@
 @media(max-width:850px){.track-head,.track-row{grid-template-columns:28px minmax(150px,2fr) minmax(80px,1fr) 55px 34px;gap:6px;padding:10px}.track-head span:nth-child(4),.track-row .track-format{display:none}.track-album{font-size:9px}}
 @media(max-width:560px){.track-head,.track-row{grid-template-columns:24px minmax(120px,1fr) 52px 32px}.track-head span:nth-child(3),.track-row .track-album{display:none}.track-title b{max-width:175px}.track-now b,.track-now small{max-width:120px}.volume-range{width:55px}.player-extras{gap:5px}}
 :root[data-density="compact"] .track-row{min-height:48px;padding-top:7px;padding-bottom:7px}
+
+:root{font-size:calc(16px * var(--font-scale,1))}
+:root[data-background="glass"] .settings-card,:root[data-background="glass"] .track-table,:root[data-background="glass"] .empty-library{backdrop-filter:blur(var(--glass-blur,16px))}
+:root[data-player="floating"] .player-bar{left:14px;right:14px;bottom:12px;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 50px #0008}
+.playlist-card{display:flex;align-items:center;justify-content:space-between;margin:10px 0}
