@@ -25,7 +25,7 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http:
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.wma', '.aiff'])
 let tracks = []
 let lastScan = null
-let scanning = false
+let scanPromise = null
 
 app.use(cors({ origin(origin, callback) {
   const isPrivateLan = origin && /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin)
@@ -48,9 +48,8 @@ async function walk(directory) {
 }
 
 async function scanLibrary() {
-  if (scanning) return tracks
-  scanning = true
-  try {
+  if (scanPromise) return scanPromise
+  const currentScan = (async () => {
     await fs.access(MUSIC_ROOT)
     const files = await walk(MUSIC_ROOT)
     const next = []
@@ -74,7 +73,10 @@ async function scanLibrary() {
     tracks = next.sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || (a.track || 0) - (b.track || 0))
     lastScan = new Date().toISOString()
     return tracks
-  } finally { scanning = false }
+  })()
+  scanPromise = currentScan
+  try { return await currentScan }
+  finally { if (scanPromise === currentScan) scanPromise = null }
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'Resonance Music Server', version: '0.2.0', root: MUSIC_ROOT, lastScan, trackCount: tracks.length }))
