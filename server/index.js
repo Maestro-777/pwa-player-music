@@ -7,10 +7,12 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
+import NodeID3 from 'node-id3'
 
 const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
 const SYNC_FILE = path.join(SERVER_DIR, 'resonance-sync.json')
+const BACKUP_DIR = path.join(SERVER_DIR, 'backups')
 const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], updatedAt: null }
 async function readSync() { try { return { ...emptySync, ...JSON.parse(await fs.readFile(SYNC_FILE, 'utf8')) } } catch { return { ...emptySync } } }
 async function writeSync(value) { const safe = { version: 1, favorites: Array.isArray(value.favorites) ? value.favorites.filter(x => typeof x === 'string').slice(0, 10000) : [], playlists: Array.isArray(value.playlists) ? value.playlists.slice(0, 500) : [], history: Array.isArray(value.history) ? value.history.slice(0, 500) : [], queue: Array.isArray(value.queue) ? value.queue.slice(0, 5000) : [], updatedAt: new Date().toISOString() }; await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
@@ -30,7 +32,7 @@ app.use(cors({ origin(origin, callback) {
   if (!origin || allowedOrigins.includes(origin) || isPrivateLan || isTailscale) return callback(null, true)
   return callback(new Error('Origin is not allowed by CORS'))
 } }))
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '12mb' }))
 
 async function walk(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true })
@@ -106,6 +108,54 @@ app.get('/api/lyrics/:id', async (req, res) => {
   }
   return res.sendStatus(404)
 })
+function safeTrackPath(track) {
+  const absolutePath = path.resolve(MUSIC_ROOT, track.relativePath)
+  if (!absolutePath.startsWith(MUSIC_ROOT + path.sep)) throw new Error('Invalid track path')
+  return absolutePath
+}
+function writeId3(tags, filePath) {
+  return new Promise((resolve, reject) => NodeID3.write(tags, filePath, error => error ? reject(error) : resolve(true)))
+}
+app.get('/api/metadata/:id', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.sendStatus(404)
+  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Запись тегов пока поддерживается только для MP3. Другие форматы доступны только для чтения.' })
+  try {
+    const metadata = await parseFile(safeTrackPath(track), { duration: false })
+    const picture = metadata.common.picture?.[0]
+    res.json({ id: track.id, title: metadata.common.title || track.title, artist: metadata.common.artist || track.artist, album: metadata.common.album || track.album, genre: metadata.common.genre?.[0] || '', year: metadata.common.year || '', trackNumber: metadata.common.track?.no || '', hasCover: Boolean(picture?.data?.length), coverMime: picture?.format || null, writable: true })
+  } catch (error) { res.status(500).json({ error: error.message }) }
+})
+app.put('/api/metadata/:id', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.sendStatus(404)
+  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Запись тегов пока поддерживается только для MP3.' })
+  const tags = {}
+  for (const key of ['title', 'artist', 'album', 'genre']) { if (req.body[key] !== undefined) { if (typeof req.body[key] !== 'string' || req.body[key].length > 500) return res.status(400).json({ error: 'Некорректное поле: ' + key }); tags[key] = req.body[key].trim() } }
+  if (req.body.year !== undefined && req.body.year !== '') { const year = Number(req.body.year); if (!Number.isInteger(year) || year < 1000 || year > 9999) return res.status(400).json({ error: 'Некорректный год.' }); tags.year = String(year) }
+  if (req.body.trackNumber !== undefined && req.body.trackNumber !== '') { const n = Number(req.body.trackNumber); if (!Number.isInteger(n) || n < 1 || n > 9999) return res.status(400).json({ error: 'Некорректный номер дорожки.' }); tags.trackNumber = String(n) }
+  if (req.body.coverData) {
+    const match = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/.exec(req.body.coverData)
+    if (!match) return res.status(400).json({ error: 'Обложка должна быть JPG или PNG.' })
+    const imageBuffer = Buffer.from(match[2], 'base64')
+    if (imageBuffer.length > 8 * 1024 * 1024) return res.status(413).json({ error: 'Обложка слишком большая (максимум 8 МБ).' })
+    tags.image = { mime: match[1] === 'jpeg' ? 'image/jpeg' : 'image/png', type: { id: 3, name: 'front cover' }, description: 'Cover', imageBuffer }
+  }
+  try {
+    const filePath = safeTrackPath(track); await fs.mkdir(BACKUP_DIR, { recursive: true })
+    await fs.copyFile(filePath, path.join(BACKUP_DIR, track.id + '-' + Date.now() + '.mp3'))
+    const ok = await writeId3(tags, filePath); if (!ok) throw new Error('Не удалось записать ID3-теги.')
+    await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id), backupAvailable: true })
+  } catch (error) { res.status(500).json({ error: error.message || 'Ошибка записи метаданных' }) }
+})
+app.post('/api/metadata/:id/restore', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.sendStatus(404)
+  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Восстановление доступно только для MP3.' })
+  try { const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith('.mp3')).sort().reverse(); if (!names.length) return res.status(404).json({ error: 'Резервная копия не найдена.' }); await fs.copyFile(path.join(BACKUP_DIR, names[0]), safeTrackPath(track)); await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id) }) }
+  catch (error) { res.status(500).json({ error: error.message }) }
+})
+
 app.get('/api/sync', async (_req, res) => res.json(await readSync()))
 app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
 app.post('/api/library/scan', async (_req, res) => {
