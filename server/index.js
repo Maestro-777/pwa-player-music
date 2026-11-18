@@ -90,6 +90,22 @@ app.get('/api/cover/:id', async (req, res) => {
     res.end(picture.data)
   } catch { res.sendStatus(404) }
 })
+app.get('/api/lyrics/:id', async (req, res) => {
+  const track = tracks.find(item => item.id === req.params.id)
+  if (!track) return res.sendStatus(404)
+  const audioPath = path.resolve(MUSIC_ROOT, track.relativePath)
+  if (!audioPath.startsWith(MUSIC_ROOT + path.sep)) return res.sendStatus(400)
+  const stem = audioPath.slice(0, audioPath.length - path.extname(audioPath).length)
+  for (const ext of ['.lrc', '.txt']) {
+    try {
+      const content = await fs.readFile(stem + ext, 'utf8')
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.setHeader('Cache-Control', 'private, max-age=300')
+      return res.send(content)
+    } catch (error) { if (error.code !== 'ENOENT') return res.sendStatus(500) }
+  }
+  return res.sendStatus(404)
+})
 app.get('/api/sync', async (_req, res) => res.json(await readSync()))
 app.put('/api/sync', async (req, res) => { try { res.json(await writeSync(req.body || {})) } catch (error) { res.status(500).json({ error: error.message }) } })
 app.post('/api/library/scan', async (_req, res) => {
