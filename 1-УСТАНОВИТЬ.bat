@@ -1,38 +1,40 @@
 @echo off
-chcp 65001 >nul
-title Resonance Music - установка
+setlocal
+title Resonance Music - Setup
 cd /d "%~dp0"
 
 echo.
-echo  RESONANCE MUSIC - ПЕРВОНАЧАЛЬНАЯ УСТАНОВКА
-echo  ==========================================
+echo RESONANCE MUSIC - FIRST TIME SETUP
+echo ==================================
 echo.
+
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Не найден Node.js. Установи LTS-версию с https://nodejs.org/
-  echo После установки закрой это окно и запусти файл снова.
+  echo Node.js was not found. Install Node.js LTS from https://nodejs.org/
   pause
   exit /b 1
 )
 where npm >nul 2>nul
 if errorlevel 1 (
-  echo Не найден npm. Переустанови Node.js с сайта https://nodejs.org/
+  echo npm was not found. Reinstall Node.js LTS from https://nodejs.org/
   pause
   exit /b 1
 )
 
 if not exist "server\.env" (
-  copy "server\.env.example" "server\.env" >nul
-  echo Создан server\.env
+  copy /y "server\.env.example" "server\.env" >nul
+  if errorlevel 1 (
+    echo Could not create server\.env
+    pause
+    exit /b 1
+  )
 )
 
-echo.
-echo Устанавливаю компоненты интерфейса...
+echo Installing frontend packages...
 call npm install
 if errorlevel 1 goto failed
 
-echo.
-echo Устанавливаю компоненты музыкального сервера...
+echo Installing music server packages...
 pushd server
 call npm install
 if errorlevel 1 (
@@ -42,12 +44,13 @@ if errorlevel 1 (
 popd
 
 echo.
-echo ГОТОВО! Теперь дважды щёлкни по файлу 2-ЗАПУСТИТЬ.bat
+echo SETUP COMPLETE.
+echo Now double-click 2-ZAPUSTIT.bat
 pause
 exit /b 0
 
 :failed
 echo.
-echo Ошибка установки. Проверь подключение к интернету и повтори запуск.
+echo INSTALLATION FAILED. Check your internet connection and try again.
 pause
 exit /b 1

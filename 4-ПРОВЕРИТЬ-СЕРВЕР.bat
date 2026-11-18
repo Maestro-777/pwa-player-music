@@ -1,7 +1,6 @@
 @echo off
-chcp 65001 >nul
-title Resonance Music - проверка
-echo Проверяю музыкальный сервер...
-powershell -NoProfile -Command "try { $r=Invoke-RestMethod http://127.0.0.1:4317/api/health -TimeoutSec 5; Write-Host ('Сервер работает. Треков в индексе: ' + $r.trackCount); Write-Host ('Папка музыки: ' + $r.root) } catch { Write-Host 'Сервер не отвечает. Сначала запусти 2-ЗАПУСТИТЬ.bat'; exit 1 }"
+title Resonance Music - Health Check
+echo Checking music server...
+powershell -NoProfile -Command "try { $r=Invoke-RestMethod http://127.0.0.1:4317/api/health -TimeoutSec 5; Write-Host ('Server is running. Indexed tracks: ' + $r.trackCount); Write-Host ('Music folder: ' + $r.root) } catch { Write-Host 'Server is not responding. Start 2-ZAPUSTIT.bat first.'; exit 1 }"
 echo.
 pause
