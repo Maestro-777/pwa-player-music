@@ -36,7 +36,7 @@ function sanitizePrefs(value:unknown):Prefs{
   background:['solid','gradient','glass'].includes(String(input.background))?String(input.background):'gradient',
   coverShape:input.coverShape==='square'||input.coverShape==='circle'?input.coverShape:'rounded',
   radius:bounded('radius',4,28,14),fontScale:bounded('fontScale',85,120,100),blur:bounded('blur',0,30,16),crossfadeSeconds:bounded('crossfadeSeconds',0,8,4),
-  floatingPlayer:typeof input.floatingPlayer==='boolean'?input.floatingPlayer:false
+  floatingPlayer:typeof input.floatingPlayer==='boolean'?input.floatingPlayer:true
  }
 }
 function sanitizeStringList(value:unknown,limit:number):string[]{
