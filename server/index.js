@@ -111,6 +111,7 @@ async function scanLibrary() {
           albumArtist: common.albumartist || common.artist || 'Неизвестный исполнитель',
           track: common.track?.no || null, year: common.year || null, genre: common.genre?.[0] || null,
           duration: metadata.format.duration || 0, format: path.extname(filePath).slice(1).toUpperCase(),
+          replayGainDb: (() => { const raw = common.replaygain_track_gain ?? common.replayGainTrackGain; const match = String(raw ?? '').match(/-?\\d+(?:\\.\\d+)?/); return match ? Math.max(-12, Math.min(6, Number(match[0]))) : null })(),
           size: stat.size, relativePath, hasEmbeddedPicture: Boolean(common.picture?.length),
         })
       } catch (error) { console.warn('Metadata skipped:', filePath, error.message) }

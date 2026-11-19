@@ -16,7 +16,7 @@ function normalizeEq(value:unknown):EqState{
  return {...flatEq,'32':clamp(stored.bass),'64':clamp(stored.bass),'125':clamp(stored.bass),'250':clamp(stored.mid),'500':clamp(stored.mid),'1000':clamp(stored.mid),'2000':clamp(stored.mid),'4000':clamp(stored.treble),'8000':clamp(stored.treble),'16000':clamp(stored.treble)}
 }
 function readEq():EqState{try{return normalizeEq(JSON.parse(localStorage.getItem('resonance-equalizer')||'{}').eq)}catch{return {...flatEq}}}
-type Track = { id:string; title:string; artist:string; album:string; duration:number; format:string; year:number|null; genre:string|null }
+type Track = { id:string; title:string; artist:string; album:string; duration:number; format:string; year:number|null; genre:string|null; replayGainDb?:number|null }
 type Playlist = { id:string; name:string; trackIds:string[] }
 type Album = { key:string; title:string; artist:string; year:number|null; tracks:Track[] }
 type Theme = 'dark'|'light'|'system'
@@ -92,7 +92,7 @@ export default function App(){
  const activeLyricRef=useRef<HTMLParagraphElement|null>(null)
  const audio=useRef<HTMLAudioElement>(null)
  const audioContext=useRef<AudioContext|null>(null), sourceNode=useRef<MediaElementAudioSourceNode|null>(null)
- const eqNodes=useRef<BiquadFilterNode[]>([]), analyser=useRef<AnalyserNode|null>(null), visualCanvas=useRef<HTMLCanvasElement>(null)
+ const eqNodes=useRef<BiquadFilterNode[]>([]), replayGainNode=useRef<GainNode|null>(null), analyser=useRef<AnalyserNode|null>(null), visualCanvas=useRef<HTMLCanvasElement>(null)
  const [eq,setEq]=useState<EqState>(readEq)
  const [lyrics,setLyrics]=useState(''),[lyricsOpen,setLyricsOpen]=useState(false),[lyricsStatus,setLyricsStatus]=useState('')
  const [eqPreset,setEqPreset]=useState(()=>{try{return JSON.parse(localStorage.getItem('resonance-equalizer')||'{}').eqPreset||'Плоский'}catch{return 'Плоский'}})
@@ -139,15 +139,17 @@ export default function App(){
   draw();return()=>cancelAnimationFrame(raf)
  },[playing,prefs.visualizer,current?.id])
  useEffect(()=>{eqNodes.current.forEach((node,i)=>{node.gain.value=eq[eqBands[i].key]});localStorage.setItem('resonance-equalizer',JSON.stringify({eq,eqPreset}))},[eq,eqPreset])
+ useEffect(()=>{const db=typeof current?.replayGainDb==='number'?Math.max(-12,Math.min(6,current.replayGainDb)):0;const target=Math.pow(10,db/20);if(replayGainNode.current&&audioContext.current)replayGainNode.current.gain.setTargetAtTime(target,audioContext.current.currentTime,.08)},[current?.id,current?.replayGainDb])
  function prepareAudioGraph(){
   const el=audio.current;if(!el||sourceNode.current)return
   const ctx=new window.AudioContext(),source=ctx.createMediaElementSource(el)
   const filters=eqBands.map(({frequency})=>{const filter=ctx.createBiquadFilter();filter.type='peaking';filter.frequency.value=frequency;filter.Q.value=1;return filter})
   let previous:AudioNode=source
   filters.forEach(filter=>{previous.connect(filter);previous=filter})
+  const gain=ctx.createGain();gain.gain.value=1;previous.connect(gain)
   const meter=ctx.createAnalyser();meter.fftSize=128;meter.smoothingTimeConstant=.82
-  previous.connect(meter);meter.connect(ctx.destination)
-  audioContext.current=ctx;sourceNode.current=source;eqNodes.current=filters;analyser.current=meter
+  gain.connect(meter);meter.connect(ctx.destination)
+  audioContext.current=ctx;sourceNode.current=source;eqNodes.current=filters;replayGainNode.current=gain;analyser.current=meter
   filters.forEach((filter,index)=>{filter.gain.value=eq[eqBands[index].key]})
  }
  function setEqualizer(name:string){
