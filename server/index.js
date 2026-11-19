@@ -181,6 +181,7 @@ async function writeContainerTags(filePath, tags, coverData) {
   const stem = filePath.slice(0, -extension.length)
   const tempPath = stem + '.resonance-tmp' + extension
   const coverPath = stem + '.resonance-cover.tmp'
+  const originalPath = stem + '.resonance-original' + extension
   const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', filePath]
   try {
     if (coverData) {
@@ -198,17 +199,21 @@ async function writeContainerTags(filePath, tags, coverData) {
     if (coverData) args.push('-disposition:v:0', 'attached_pic')
     args.push(tempPath)
     await runFfmpeg(args)
-    await fs.rename(tempPath, filePath)
+    await fs.rename(filePath, originalPath)
+    try { await fs.rename(tempPath, filePath) } catch (error) { await fs.rename(originalPath, filePath).catch(() => {}); throw error }
+    await fs.rm(originalPath, { force: true })
     return true
   } finally {
     await fs.rm(tempPath, { force: true }).catch(() => {})
+    await fs.rm(originalPath, { force: true }).catch(() => {})
     await fs.rm(coverPath, { force: true }).catch(() => {})
   }
 }
 app.get('/api/metadata/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
-  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Запись тегов пока поддерживается только для MP3. Другие форматы доступны только для чтения.' })
+  const extension = path.extname(track.relativePath).toLowerCase()
+  if (extension !== '.mp3' && !FFMPEG_FORMATS.has(extension)) return res.status(415).json({ error: 'Редактирование доступно для MP3, FLAC, M4A, OGG и OPUS. Для этих форматов требуется FFmpeg.' })
   try {
     const metadata = await parseFile(safeTrackPath(track), { duration: false })
     const picture = metadata.common.picture?.[0]
