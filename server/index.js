@@ -173,6 +173,15 @@ app.get('/api/lyrics/:id', async (req, res) => {
 function safeTrackPath(track) {
   return resolveSafePath(MUSIC_ROOT, track.relativePath)
 }
+async function createTrackBackup(track, keep = 10) {
+  const extension = path.extname(track.relativePath).toLowerCase()
+  await fs.mkdir(BACKUP_DIR, { recursive: true })
+  const id = track.id + '-' + Date.now() + extension
+  await fs.copyFile(safeTrackPath(track), path.join(BACKUP_DIR, id))
+  const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith(extension)).sort().reverse()
+  await Promise.all(names.slice(keep).map(name => fs.rm(path.join(BACKUP_DIR, name), { force: true })))
+  return id
+}
 function writeId3(tags, filePath) {
   return new Promise((resolve, reject) => NodeID3.write(tags, filePath, error => error ? reject(error) : resolve(true)))
 }
@@ -249,8 +258,7 @@ app.put('/api/metadata/:id', async (req, res) => {
     tags.image = { mime: match[1] === 'jpeg' ? 'image/jpeg' : 'image/png', type: { id: 3, name: 'front cover' }, description: 'Cover', imageBuffer }
   }
   try {
-    const filePath = safeTrackPath(track); await fs.mkdir(BACKUP_DIR, { recursive: true })
-    await fs.copyFile(filePath, path.join(BACKUP_DIR, track.id + '-' + Date.now() + extension))
+    const filePath = safeTrackPath(track); await createTrackBackup(track)
     if (extension === '.mp3') { const ok = await writeId3(tags, filePath); if (!ok) throw new Error('Не удалось записать ID3-теги.') }
     else await writeContainerTags(filePath, tags, req.body.coverData || '')
     await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id), backupAvailable: true })
@@ -260,7 +268,7 @@ app.post('/api/metadata/:id/restore', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
   const extension = path.extname(track.relativePath).toLowerCase()
-  try { const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith(extension)).sort().reverse(); if (!names.length) return res.status(404).json({ error: 'Резервная копия не найдена.' }); await fs.copyFile(path.join(BACKUP_DIR, names[0]), safeTrackPath(track)); await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id) }) }
+  try { const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith(extension)).sort().reverse(); if (!names.length) return res.status(404).json({ error: 'Резервная копия не найдена.' }); await createTrackBackup(track); await fs.copyFile(path.join(BACKUP_DIR, names[0]), safeTrackPath(track)); await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id) }) }
   catch (error) { res.status(500).json({ error: error.message }) }
 })
 
@@ -286,6 +294,7 @@ app.post('/api/backups/:id/restore', async (req, res) => {
   try {
     const backupPath = path.join(BACKUP_DIR, req.params.id)
     await fs.access(backupPath)
+    await createTrackBackup(track)
     await fs.copyFile(backupPath, safeTrackPath(track))
     await scanLibrary()
     res.json({ ok: true, track: tracks.find(item => item.id === track.id) })
