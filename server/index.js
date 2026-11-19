@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
 import NodeID3 from 'node-id3'
-import { parseByteRange, resolveSafePath, sanitizeSyncState, mergeSyncStates, resolveServerHost, sanitizeUploadFilename } from './lib/utils.js'
+import { parseByteRange, resolveSafePath, sanitizeSyncState, mergeSyncStates, parseReplayGainDb, resolveServerHost, sanitizeUploadFilename } from './lib/utils.js'
 
 const app = express()
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -124,7 +124,7 @@ async function scanLibrary() {
           albumArtist: common.albumartist || common.artist || 'Неизвестный исполнитель',
           track: common.track?.no || null, year: common.year || null, genre: common.genre?.[0] || null,
           duration: metadata.format.duration || 0, format: path.extname(filePath).slice(1).toUpperCase(),
-          replayGainDb: (() => { const raw = common.replaygain_track_gain ?? common.replayGainTrackGain; const match = String(raw ?? '').match(/-?\d+(?:\.\d+)?/); return match ? Math.max(-12, Math.min(6, Number(match[0]))) : null })(),
+          replayGainDb: parseReplayGainDb(common.replaygain_track_gain ?? common.replayGainTrackGain),
           size: stat.size, relativePath, hasEmbeddedPicture: Boolean(common.picture?.length),
         })
       } catch (error) { console.warn('Metadata skipped:', filePath, error.message) }

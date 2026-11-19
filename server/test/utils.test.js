@@ -85,3 +85,13 @@ test('mergeSyncStates keeps concurrent additions instead of replacing the previo
   assert.deepEqual(new Set(merged.history), new Set(['old', 'new']))
   assert.deepEqual(new Set(merged.queue), new Set(['one', 'two']))
 })
+
+test('parseReplayGainDb reads gain tags and clamps unsafe extremes', async () => {
+  const { parseReplayGainDb } = await import('../lib/utils.js')
+  assert.equal(parseReplayGainDb('-7.25 dB'), -7.25)
+  assert.equal(parseReplayGainDb('+4.5 dB'), 4.5)
+  assert.equal(parseReplayGainDb('loudness unknown'), null)
+  assert.equal(parseReplayGainDb(null), null)
+  assert.equal(parseReplayGainDb('-30 dB'), -12)
+  assert.equal(parseReplayGainDb('12 dB'), 6)
+})

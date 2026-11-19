@@ -113,3 +113,11 @@ export function sanitizeUploadFilename(input) {
   const stem = rawStem.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+/, '').replace(/[. ]+$/g, '').trim().slice(0, 120) || 'audio'
   return stem + extension
 }
+
+export function parseReplayGainDb(value) {
+  if (value === null || value === undefined) return null
+  const match = String(value).match(/-?\d+(?:\.\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? Math.max(-12, Math.min(6, parsed)) : null
+}
