@@ -50,7 +50,7 @@ export function mergeSyncStates(previous = {}, incoming = {}) {
     version: 1,
     favorites: mergeStrings(left.favorites, right.favorites, 10000),
     playlists: [...playlistMap.values()].slice(-500),
-    history: mergeStrings(right.history, left.history, 500).reverse(),
+    history: mergeStrings(right.history, left.history, 500),
     queue: mergeStrings(left.queue, right.queue, 5000),
     preferences: right.preferences || left.preferences,
     equalizer: right.equalizer || left.equalizer,
