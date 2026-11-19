@@ -5,6 +5,7 @@ import multer from 'multer'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { createReadStream } from 'node:fs'
 import { parseFile } from 'music-metadata'
@@ -163,6 +164,47 @@ function safeTrackPath(track) {
 function writeId3(tags, filePath) {
   return new Promise((resolve, reject) => NodeID3.write(tags, filePath, error => error ? reject(error) : resolve(true)))
 }
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg'
+const FFMPEG_FORMATS = new Set(['.flac', '.m4a', '.ogg', '.opus'])
+function runFfmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(FFMPEG, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4000) })
+    child.once('error', error => reject(new Error('Для записи тегов FLAC/M4A/OGG нужен FFmpeg. Установи FFmpeg и добавь его в PATH или укажи FFMPEG_PATH. ' + error.message)))
+    child.once('close', code => code === 0 ? resolve(true) : reject(new Error('FFmpeg не смог записать метаданные: ' + stderr.slice(-1200))))
+  })
+}
+async function writeContainerTags(filePath, tags, coverData) {
+  const extension = path.extname(filePath).toLowerCase()
+  if (!FFMPEG_FORMATS.has(extension)) throw new Error('Запись тегов этого формата пока не поддерживается.')
+  const stem = filePath.slice(0, -extension.length)
+  const tempPath = stem + '.resonance-tmp' + extension
+  const coverPath = stem + '.resonance-cover.tmp'
+  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', filePath]
+  try {
+    if (coverData) {
+      const match = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/.exec(coverData)
+      if (!match) throw new Error('Обложка должна быть JPG или PNG.')
+      const bytes = Buffer.from(match[2], 'base64')
+      if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error('Обложка должна быть не больше 8 МБ.')
+      await fs.writeFile(coverPath, bytes)
+      args.push('-i', coverPath)
+    }
+    args.push('-map', '0', ...(coverData ? ['-map', '1:v:0'] : []), '-c', 'copy')
+    for (const [key, value] of Object.entries({ title: tags.title, artist: tags.artist, album: tags.album, genre: tags.genre, date: tags.year, track: tags.trackNumber })) {
+      if (value !== undefined && value !== '') args.push('-metadata', key + '=' + String(value))
+    }
+    if (coverData) args.push('-disposition:v:0', 'attached_pic')
+    args.push(tempPath)
+    await runFfmpeg(args)
+    await fs.rename(tempPath, filePath)
+    return true
+  } finally {
+    await fs.rm(tempPath, { force: true }).catch(() => {})
+    await fs.rm(coverPath, { force: true }).catch(() => {})
+  }
+}
 app.get('/api/metadata/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
@@ -170,13 +212,14 @@ app.get('/api/metadata/:id', async (req, res) => {
   try {
     const metadata = await parseFile(safeTrackPath(track), { duration: false })
     const picture = metadata.common.picture?.[0]
-    res.json({ id: track.id, title: metadata.common.title || track.title, artist: metadata.common.artist || track.artist, album: metadata.common.album || track.album, genre: metadata.common.genre?.[0] || '', year: metadata.common.year || '', trackNumber: metadata.common.track?.no || '', hasCover: Boolean(picture?.data?.length), coverMime: picture?.format || null, writable: true })
+    res.json({ id: track.id, title: metadata.common.title || track.title, artist: metadata.common.artist || track.artist, album: metadata.common.album || track.album, genre: metadata.common.genre?.[0] || '', year: metadata.common.year || '', trackNumber: metadata.common.track?.no || '', hasCover: Boolean(picture?.data?.length), coverMime: picture?.format || null, writable: true, writer: extension === '.mp3' ? 'native' : 'ffmpeg' })
   } catch (error) { res.status(500).json({ error: error.message }) }
 })
 app.put('/api/metadata/:id', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
-  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Запись тегов пока поддерживается только для MP3.' })
+  const extension = path.extname(track.relativePath).toLowerCase()
+  if (extension !== '.mp3' && !FFMPEG_FORMATS.has(extension)) return res.status(415).json({ error: 'Формат записи не поддерживается.' })
   const tags = {}
   for (const key of ['title', 'artist', 'album', 'genre']) { if (req.body[key] !== undefined) { if (typeof req.body[key] !== 'string' || req.body[key].length > 500) return res.status(400).json({ error: 'Некорректное поле: ' + key }); tags[key] = req.body[key].trim() } }
   if (req.body.year !== undefined && req.body.year !== '') { const year = Number(req.body.year); if (!Number.isInteger(year) || year < 1000 || year > 9999) return res.status(400).json({ error: 'Некорректный год.' }); tags.year = String(year) }
@@ -190,16 +233,17 @@ app.put('/api/metadata/:id', async (req, res) => {
   }
   try {
     const filePath = safeTrackPath(track); await fs.mkdir(BACKUP_DIR, { recursive: true })
-    await fs.copyFile(filePath, path.join(BACKUP_DIR, track.id + '-' + Date.now() + '.mp3'))
-    const ok = await writeId3(tags, filePath); if (!ok) throw new Error('Не удалось записать ID3-теги.')
+    await fs.copyFile(filePath, path.join(BACKUP_DIR, track.id + '-' + Date.now() + extension))
+    if (extension === '.mp3') { const ok = await writeId3(tags, filePath); if (!ok) throw new Error('Не удалось записать ID3-теги.') }
+    else await writeContainerTags(filePath, tags, req.body.coverData || '')
     await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id), backupAvailable: true })
   } catch (error) { res.status(500).json({ error: error.message || 'Ошибка записи метаданных' }) }
 })
 app.post('/api/metadata/:id/restore', async (req, res) => {
   const track = tracks.find(item => item.id === req.params.id)
   if (!track) return res.sendStatus(404)
-  if (path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.status(415).json({ error: 'Восстановление доступно только для MP3.' })
-  try { const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith('.mp3')).sort().reverse(); if (!names.length) return res.status(404).json({ error: 'Резервная копия не найдена.' }); await fs.copyFile(path.join(BACKUP_DIR, names[0]), safeTrackPath(track)); await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id) }) }
+  const extension = path.extname(track.relativePath).toLowerCase()
+  try { const names = (await fs.readdir(BACKUP_DIR)).filter(name => name.startsWith(track.id + '-') && name.endsWith(extension)).sort().reverse(); if (!names.length) return res.status(404).json({ error: 'Резервная копия не найдена.' }); await fs.copyFile(path.join(BACKUP_DIR, names[0]), safeTrackPath(track)); await scanLibrary(); res.json({ ok: true, track: tracks.find(item => item.id === track.id) }) }
   catch (error) { res.status(500).json({ error: error.message }) }
 })
 
@@ -209,21 +253,21 @@ app.get('/api/backups', async (_req, res) => {
     const entries = await fs.readdir(BACKUP_DIR, { withFileTypes: true })
     const backups = []
     for (const entry of entries) {
-      if (!entry.isFile() || !/^[a-f0-9]{40}-\d+\.mp3$/.test(entry.name)) continue
+      if (!entry.isFile() || !/^[a-f0-9]{40}-\d+\.(mp3|flac|m4a|ogg|opus)$/.test(entry.name)) continue
       const stat = await fs.stat(path.join(BACKUP_DIR, entry.name))
-      backups.push({ id: entry.name.slice(0, -4), trackId: entry.name.split('-')[0], createdAt: new Date(stat.mtimeMs).toISOString(), size: stat.size })
+      backups.push({ id: entry.name.replace(/\.(mp3|flac|m4a|ogg|opus)$/i, ''), trackId: entry.name.split('-')[0], createdAt: new Date(stat.mtimeMs).toISOString(), size: stat.size })
     }
     backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     res.json({ backups })
   } catch (error) { res.status(500).json({ error: error.message }) }
 })
 app.post('/api/backups/:id/restore', async (req, res) => {
-  if (!/^[a-f0-9]{40}-\d+$/.test(req.params.id)) return res.sendStatus(400)
+  if (!/^[a-f0-9]{40}-\d+\.(mp3|flac|m4a|ogg|opus)$/.test(req.params.id)) return res.sendStatus(400)
   const [trackId] = req.params.id.split('-')
   const track = tracks.find(item => item.id === trackId)
-  if (!track || path.extname(track.relativePath).toLowerCase() !== '.mp3') return res.sendStatus(404)
+  if (!track || path.extname(track.relativePath).toLowerCase() !== path.extname(req.params.id).toLowerCase()) return res.sendStatus(404)
   try {
-    const backupPath = path.join(BACKUP_DIR, req.params.id + '.mp3')
+    const backupPath = path.join(BACKUP_DIR, req.params.id)
     await fs.access(backupPath)
     await fs.copyFile(backupPath, safeTrackPath(track))
     await scanLibrary()
