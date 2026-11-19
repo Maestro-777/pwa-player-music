@@ -18,7 +18,19 @@ const SYNC_FILE = path.join(SERVER_DIR, 'resonance-sync.json')
 const BACKUP_DIR = path.join(SERVER_DIR, 'backups')
 const emptySync = { version: 1, favorites: [], playlists: [], history: [], queue: [], preferences: null, equalizer: null, updatedAt: null }
 async function readSync() { try { return sanitizeSyncState(JSON.parse(await fs.readFile(SYNC_FILE, 'utf8'))) } catch { return { ...emptySync } } }
-async function writeSync(value) { const safe = mergeSyncStates(await readSync(), value); await fs.mkdir(SERVER_DIR, { recursive: true }); await fs.writeFile(SYNC_FILE, JSON.stringify(safe, null, 2), 'utf8'); return safe }
+let syncWriteQueue = Promise.resolve()
+function writeSync(value) {
+  const task = syncWriteQueue.then(async () => {
+    const safe = mergeSyncStates(await readSync(), value)
+    await fs.mkdir(SERVER_DIR, { recursive: true })
+    const temp = SYNC_FILE + '.tmp'
+    await fs.writeFile(temp, JSON.stringify(safe, null, 2), 'utf8')
+    await fs.rename(temp, SYNC_FILE).catch(async error => { await fs.rm(SYNC_FILE, { force: true }); await fs.rename(temp, SYNC_FILE); if (error.code !== 'EEXIST' && error.code !== 'EPERM') throw error })
+    return safe
+  })
+  syncWriteQueue = task.catch(() => {})
+  return task
+}
 
 const PORT = Number(process.env.PORT || 4317)
 const requestedHost = process.env.HOST
