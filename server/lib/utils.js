@@ -52,6 +52,7 @@ export function mergeSyncStates(previous = {}, incoming = {}) {
     playlists: [...playlistMap.values()].slice(-500),
     history: mergeStrings(right.history, left.history, 500),
     queue: mergeStrings(left.queue, right.queue, 5000),
+    playback: (() => { const a = left.playback, b = right.playback; if (!a) return b; if (!b) return a; return Date.parse(b.updatedAt || '') >= Date.parse(a.updatedAt || '') ? b : a })(),
     preferences: right.preferences || left.preferences,
     equalizer: right.equalizer || left.equalizer,
     updatedAt: new Date().toISOString(),
@@ -69,6 +70,10 @@ export function sanitizeSyncState(value = {}) {
       .map(item => ({ id: item.id.slice(0, 128), name: item.name.trim().slice(0, 120), trackIds: strings(item.trackIds, 5000) }))
       .filter(item => item.name.length > 0)
     : []
+  const sourcePlayback = input.playback && typeof input.playback === 'object' && !Array.isArray(input.playback) ? input.playback : null
+  const playback = sourcePlayback && typeof sourcePlayback.trackId === 'string' && sourcePlayback.trackId.length <= 256 && Number.isFinite(sourcePlayback.position) && sourcePlayback.position >= 0
+    ? { trackId: sourcePlayback.trackId, position: Math.min(sourcePlayback.position, 86400), updatedAt: typeof sourcePlayback.updatedAt === 'string' ? sourcePlayback.updatedAt : null }
+    : null
   const sourcePrefs = input.preferences && typeof input.preferences === 'object' && !Array.isArray(input.preferences) ? input.preferences : {}
   const preferences = {}
   if (['dark', 'light', 'system'].includes(sourcePrefs.theme)) preferences.theme = sourcePrefs.theme
@@ -97,6 +102,7 @@ export function sanitizeSyncState(value = {}) {
     playlists,
     history: strings(input.history, 500),
     queue: strings(input.queue, 5000),
+    playback,
     preferences: Object.keys(preferences).length ? preferences : null,
     equalizer,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
