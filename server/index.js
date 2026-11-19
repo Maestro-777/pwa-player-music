@@ -226,7 +226,6 @@ async function writeContainerTags(filePath, tags, coverData) {
     return true
   } finally {
     await fs.rm(tempPath, { force: true }).catch(() => {})
-    await fs.rm(originalPath, { force: true }).catch(() => {})
     await fs.rm(coverPath, { force: true }).catch(() => {})
   }
 }
