@@ -80,7 +80,7 @@ export function sanitizeSyncState(value = {}) {
   if (['violet', 'blue', 'mint', 'rose', 'amber'].includes(sourcePrefs.accent)) preferences.accent = sourcePrefs.accent
   for (const key of ['compact', 'sidebar', 'visualizer', 'floatingPlayer']) if (typeof sourcePrefs[key] === 'boolean') preferences[key] = sourcePrefs[key]
   if (['solid', 'gradient', 'glass'].includes(sourcePrefs.background)) preferences.background = sourcePrefs.background
-  for (const [key, min, max] of [['radius', 4, 28], ['fontScale', 85, 120], ['blur', 0, 30]]) {
+  for (const [key, min, max] of [['radius', 4, 28], ['fontScale', 85, 120], ['blur', 0, 30], ['crossfadeSeconds', 0, 8]]) {
     const value = Number(sourcePrefs[key])
     if (Number.isFinite(value)) preferences[key] = Math.min(max, Math.max(min, value))
   }
