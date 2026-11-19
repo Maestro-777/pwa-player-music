@@ -73,3 +73,15 @@ test('sanitizeUploadFilename strips paths and unsafe characters while preserving
   assert.throws(() => sanitizeUploadFilename('cover.jpg'), /Unsupported audio/)
   assert.throws(() => sanitizeUploadFilename(''), /Empty upload/)
 })
+
+test('mergeSyncStates keeps concurrent additions instead of replacing the previous device state', async () => {
+  const { mergeSyncStates } = await import('../lib/utils.js')
+  const merged = mergeSyncStates(
+    { favorites: ['a'], playlists: [{ id: 'mix', name: 'Mix', trackIds: ['one'] }], history: ['old'], queue: ['one'] },
+    { favorites: ['b'], playlists: [{ id: 'mix', name: 'Mix', trackIds: ['two'] }], history: ['new'], queue: ['two'] },
+  )
+  assert.deepEqual(new Set(merged.favorites), new Set(['a', 'b']))
+  assert.deepEqual(merged.playlists, [{ id: 'mix', name: 'Mix', trackIds: ['one', 'two'] }])
+  assert.deepEqual(new Set(merged.history), new Set(['old', 'new']))
+  assert.deepEqual(new Set(merged.queue), new Set(['one', 'two']))
+})

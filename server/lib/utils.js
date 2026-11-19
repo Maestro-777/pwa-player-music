@@ -35,6 +35,29 @@ export function parseByteRange(header, size) {
   return { start, end }
 }
 
+export function mergeSyncStates(previous = {}, incoming = {}) {
+  const left = sanitizeSyncState(previous)
+  const right = sanitizeSyncState(incoming)
+  const mergeStrings = (a, b, limit) => [...new Set([...a, ...b])].slice(-limit)
+  const playlistMap = new Map(left.playlists.map(item => [item.id, item]))
+  for (const item of right.playlists) {
+    const old = playlistMap.get(item.id)
+    playlistMap.set(item.id, old
+      ? { ...old, ...item, trackIds: mergeStrings(old.trackIds, item.trackIds, 5000) }
+      : item)
+  }
+  return {
+    version: 1,
+    favorites: mergeStrings(left.favorites, right.favorites, 10000),
+    playlists: [...playlistMap.values()].slice(-500),
+    history: mergeStrings(right.history, left.history, 500).reverse(),
+    queue: mergeStrings(left.queue, right.queue, 5000),
+    preferences: right.preferences || left.preferences,
+    equalizer: right.equalizer || left.equalizer,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 export function sanitizeSyncState(value = {}) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   const strings = (items, limit) => Array.isArray(items)
