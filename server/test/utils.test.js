@@ -95,3 +95,10 @@ test('parseReplayGainDb reads gain tags and clamps unsafe extremes', async () =>
   assert.equal(parseReplayGainDb('-30 dB'), -12)
   assert.equal(parseReplayGainDb('12 dB'), 6)
 })
+
+test('sanitizeSyncState validates playback resume snapshots', async () => {
+  const { sanitizeSyncState } = await import('../lib/utils.js')
+  const valid = sanitizeSyncState({ playback: { trackId: 'track-1', position: 42.5, updatedAt: '2026-11-19T05:00:00.000Z' } })
+  assert.deepEqual(valid.playback, { trackId: 'track-1', position: 42.5, updatedAt: '2026-11-19T05:00:00.000Z' })
+  assert.equal(sanitizeSyncState({ playback: { trackId: '../bad', position: -1 } }).playback, null)
+})
